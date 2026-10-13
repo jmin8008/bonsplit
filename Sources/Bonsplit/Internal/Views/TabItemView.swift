@@ -334,7 +334,7 @@ struct TabItemView: View {
     let allowsClose: Bool
     let middleClickCapture: ((@escaping () -> Void) -> AnyView)?
     let allowsContextMenu: Bool
-    let contextMenuState: TabContextMenuState
+    let contextMenuStateProvider: () -> TabContextMenuState
     let moveDestinationsProvider: () -> [TabContextMoveDestination]
     let forkConversationAvailabilityProvider: () -> TabContextForkConversationAvailability
     let forkConversationAvailabilityRefreshHandler: @MainActor () async -> Void
@@ -398,7 +398,9 @@ struct TabItemView: View {
         .fixedSize(horizontal: isIconOnlyPinned || !fillsWidth, vertical: false)
         .background(tabBackground.saturation(saturation))
         .background(TabPopoverAnchorView(tabId: tab.id, kind: .tabItem))
-        .tabControlShortcutHintVisibilityAnimation(value: showsShortcutHint)
+        // The hint crossfade is animated where it happens (`trailingAccessory`,
+        // `iconOnlyContent`). An animation here would wrap the whole tab and
+        // copy its entire view value on every render.
         .contentShape(Rectangle().inset(by: -BonsplitTabItemHitTesting.horizontalSlop))
         // Middle click to close (macOS convention).
         // The host capture view intercepts mouse-down on this tab without
@@ -416,7 +418,7 @@ struct TabItemView: View {
                 TabContextMenuPresenter(
                     snapshot: TabContextMenuSnapshot(
                         tabId: tab.id,
-                        state: contextMenuState,
+                        stateProvider: contextMenuStateProvider,
                         moveDestinationsProvider: moveDestinationsProvider,
                         forkConversationAvailabilityProvider: forkConversationAvailabilityProvider,
                         forkConversationAvailabilityRefreshHandler: forkConversationAvailabilityRefreshHandler
@@ -1455,9 +1457,10 @@ enum TabContextMenuBuilder {
     )
 
     static func makeMenu(
-        snapshot: TabContextMenuSnapshot,
+        snapshot unresolvedSnapshot: TabContextMenuSnapshot,
         target: TabContextMenuActionTarget
     ) -> TabContextMenu {
+        let snapshot = unresolvedSnapshot.resolvingState()
         let state = snapshot.state
         let forkConversationAvailability = snapshot.forkConversationAvailabilityProvider()
         let forkConversationEnabled = forkConversationAvailability == .available
