@@ -4640,6 +4640,40 @@ final class BonsplitTests: XCTestCase {
     }
 
     @MainActor
+    func testTabBarDragZoneHitTestConvertsTranslatedOrigin() throws {
+        let view = TabBarDragZoneView.DragNSView(
+            frame: NSRect(x: 96, y: 32, width: 120, height: 28)
+        )
+        view.hitRegion = .entireBounds
+        view.hitTestEventTypeOverride = .leftMouseDown
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 120),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        defer { window.orderOut(nil) }
+        guard let contentView = window.contentView else {
+            XCTFail("Expected content view")
+            return
+        }
+
+        contentView.addSubview(view)
+        window.makeKeyAndOrderFront(nil)
+
+        let localPoint = NSPoint(x: 48, y: 14)
+        let windowPoint = view.convert(localPoint, to: nil)
+        let superviewPoint = contentView.convert(windowPoint, from: nil)
+
+        XCTAssertIdentical(
+            view.hitTest(superviewPoint),
+            view,
+            "A translated drag-zone overlay must evaluate AppKit's superview point in local coordinates."
+        )
+    }
+
+    @MainActor
     func testTabBarTrailingEmptyChromeCapturesOnlyEmptyArea() throws {
         let view = TabBarDragZoneView.DragNSView(frame: NSRect(x: 0, y: 0, width: 320, height: 30))
         view.hitRegion = .trailingEmptyChrome(
