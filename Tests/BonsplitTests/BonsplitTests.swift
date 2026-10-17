@@ -647,6 +647,24 @@ final class BonsplitTests: XCTestCase {
         XCTAssertEqual(layout.trailingTabContentInset, 160)
     }
 
+    func testTabBarLayoutExtendsScrollRangeForVisibleHoverLane() {
+        let layout = TabBarLayout(
+            tabBarHeight: 28,
+            availableWidth: 800,
+            splitButtonCount: 4,
+            splitButtonLaneVisible: true,
+            reservesSplitButtonLane: false,
+            measuredSplitButtonLaneWidth: 160
+        )
+
+        XCTAssertEqual(layout.visibleSplitButtonLaneWidth, 160)
+        XCTAssertEqual(
+            layout.trailingTabContentInset,
+            160,
+            "A visible hover lane must remain inside the tab scroll document while it covers the trailing tabs"
+        )
+    }
+
     func testTabBarLayoutKeepsFiveActionButtonsVisibleBeforeClipping() {
         let layout = TabBarLayout(
             tabBarHeight: 28,
