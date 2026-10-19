@@ -10,12 +10,14 @@ struct DividerDoubleClickTests {
         var events: [String] = []
         var splitIds: [UUID] = []
         var handled = true
+        var onDoubleClick: (() -> Void)?
 
         func splitTabBarDividerDragDidBegin(_ controller: BonsplitController) { events.append("begin") }
         func splitTabBarDividerDragDidEnd(_ controller: BonsplitController) { events.append("end") }
         func splitTabBar(_ controller: BonsplitController, didDoubleClickDivider splitId: UUID) -> Bool {
             events.append("doubleClick")
             splitIds.append(splitId)
+            onDoubleClick?()
             return handled
         }
     }
@@ -38,6 +40,39 @@ struct DividerDoubleClickTests {
         try exercise(orientation: .horizontal, clickCount: 2, drag: false, handled: false)
     }
 
+    @Test func releaseIsDequeuedFromTheCapturedWindowWhenTheHostDetachesTheView() throws {
+        let controller = BonsplitController()
+        let delegate = Delegate()
+        controller.delegate = delegate
+        let pane = try #require(controller.focusedPaneId)
+        _ = try #require(controller.splitPane(pane, orientation: .horizontal))
+        guard case .split(let state) = controller.internalController.rootNode else {
+            Issue.record("Expected a split")
+            return
+        }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+                              styleMask: [.titled], backing: .buffered, defer: true)
+        let splitView = PointerSplitView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        splitView.addArrangedSubview(NSView())
+        splitView.addArrangedSubview(NSView())
+        splitView.stampedInternalController = controller.internalController
+        splitView.stampedSplitId = state.id
+        window.contentView?.addSubview(splitView)
+        // Equalizing can rebuild the split hierarchy; model that as the view leaving its window.
+        delegate.onDoubleClick = { [weak splitView] in splitView?.removeFromSuperview() }
+        let down = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: .zero,
+            modifierFlags: [], timestamp: 1, windowNumber: window.windowNumber, context: nil,
+            eventNumber: 1, clickCount: 2, pressure: 1))
+        splitView.pointerEvent = try #require(NSEvent.mouseEvent(with: .leftMouseUp, location: .zero,
+            modifierFlags: [], timestamp: 1.1, windowNumber: window.windowNumber, context: nil,
+            eventNumber: 2, clickCount: 2, pressure: 0))
+        splitView.mouseDown(with: down)
+        #expect(splitView.window == nil)
+        #expect(splitView.consumedCount == 1)
+        #expect(splitView.dequeueWindows.count == 1)
+        #expect(splitView.dequeueWindows.first.map { $0 === window } == true)
+    }
+
     @Test func staleDividerAfterSessionEndIsUnhandled() throws {
         try exercise(orientation: .horizontal, clickCount: 2, drag: false, handled: true, stale: true)
     }
@@ -46,10 +81,14 @@ struct DividerDoubleClickTests {
         var pointerEvent: NSEvent?
         var nativeTrackingCount = 0
         var consumedCount = 0
+        var dequeueWindows: [NSWindow?] = []
 
         override func trackDivider(with event: NSEvent) { nativeTrackingCount += 1 }
-        override func nextDividerEvent(dequeue: Bool) -> NSEvent? {
-            if dequeue { consumedCount += 1 }
+        override func nextDividerEvent(in window: NSWindow?, dequeue: Bool) -> NSEvent? {
+            if dequeue {
+                consumedCount += 1
+                dequeueWindows.append(window)
+            }
             return pointerEvent
         }
     }

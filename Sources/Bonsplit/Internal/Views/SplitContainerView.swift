@@ -133,10 +133,13 @@ class ThemedSplitView: NSSplitView, BonsplitManagedSplitView {
         // Leave a pending drag in the queue for AppKit's native tracking.
         // A released double-click can be offered to the host after ending
         // the resize session, so its geometry mutation is not drag-owned.
+        // Capture the window first: the host's geometry change can detach this
+        // view before the release is dequeued, which would leave it queued.
+        let trackingWindow = window
         if inDivider, event.clickCount == 2,
            let splitId = stampedSplitId,
            let trackingController = stampedInternalController,
-           let release = nextDividerEvent(dequeue: false),
+           let release = nextDividerEvent(in: trackingWindow, dequeue: false),
            release.type == .leftMouseUp,
            release.windowNumber == event.windowNumber {
             onDividerDragSession?(false)
@@ -145,7 +148,7 @@ class ThemedSplitView: NSSplitView, BonsplitManagedSplitView {
                trackingController.findSplit(splitId) != nil,
                let controller = trackingController.publicController,
                controller.delegate?.splitTabBar(controller, didDoubleClickDivider: splitId) == true {
-                _ = nextDividerEvent(dequeue: true)
+                _ = nextDividerEvent(in: trackingWindow, dequeue: true)
                 return
             }
             // The queued release is untouched. Native double-click behavior
@@ -166,7 +169,7 @@ class ThemedSplitView: NSSplitView, BonsplitManagedSplitView {
     }
 
     /// Peeks without removing events so a drag can enter native tracking unchanged.
-    func nextDividerEvent(dequeue: Bool) -> NSEvent? {
+    func nextDividerEvent(in window: NSWindow?, dequeue: Bool) -> NSEvent? {
         window?.nextEvent(matching: [.leftMouseDragged, .leftMouseUp], until: .distantFuture,
                           inMode: .eventTracking, dequeue: dequeue)
     }
